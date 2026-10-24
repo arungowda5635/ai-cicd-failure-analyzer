@@ -130,3 +130,56 @@ def analyze(log):
     ])
 
     return "\n".join(report) + "\n"
+
+import os
+import sys
+from pathlib import Path
+
+LOG_FILE = Path("failed-run.log")
+
+
+def redact(text):
+    patterns = [
+        (
+            r"(?i)(api[_-]?key|token|password|secret)\s*[:=]\s*\S+",
+            r"\1=[REDACTED]",
+        ),
+        (
+            r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+",
+            "Bearer [REDACTED]",
+        ),
+        (
+            r"\bsk-[A-Za-z0-9_-]{12,}\b",
+            "[REDACTED_API_KEY]",
+        ),
+    ]
+
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text)
+
+    return text[-20000:]
+
+
+def main():
+    if not LOG_FILE.exists():
+        raise RuntimeError("failed-run.log was not downloaded.")
+
+    log = redact(
+        LOG_FILE.read_text(encoding="utf-8", errors="replace")
+    )
+
+    report = analyze(log)
+    print(report)
+
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as summary:
+            summary.write(report + "\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        print(f"Analyzer failed: {exc}", file=sys.stderr)
+        sys.exit(1)
