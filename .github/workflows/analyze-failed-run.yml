@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      -  name: Analyze failure
+      - name: Analyze failure
         env:
           PYTHONUNBUFFERED: "1"
         run: |
