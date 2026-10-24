@@ -1,0 +1,61 @@
+
+name: Node.js CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Syntax, Dependencies and Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            echo "Checking syntax: $file"
+            node --check "$file"
+          done < <(
+            find . \
+              -path './node_modules' -prune -o \
+              -path './.git' -prune -o \
+              -name '*.js' -type f -print0
+          )
+
+      - name: Report outdated dependencies
+        continue-on-error: true
+        run: |
+          echo "## Dependency Version Report" >> "$GITHUB_STEP_SUMMARY"
+          npm outdated 2>&1 | tee outdated-dependencies.txt || true
+          if [ -s outdated-dependencies.txt ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            cat outdated-dependencies.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No outdated dependency output was reported." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run automated tests
+        run: npm test
