@@ -47,4 +47,16 @@ jobs:
           python-version: "3.12"
 
       - name: Analyze failure
-        run: python scripts/analyze_logs.py
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "===== Starting CI Failure Analysis ====="
+          python -u scripts/analyze_logs.py | tee analysis-report.md
+          echo "===== Generated Analysis Report ====="
+          cat analysis-report.md
+          echo "===== Publishing Report to GitHub Summary ====="
+          {
+            echo "# Automatic CI Failure Report"
+            echo
+            cat analysis-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
