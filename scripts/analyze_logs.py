@@ -73,9 +73,6 @@ RULES = [
         [
             "npm warn deprecated",
             "npm warn old lockfile",
-            "npm outdated",
-            "wanted",
-            "latest",
         ],
         "The log may indicate a dependency update or deprecation issue.",
         "Review the dependency report and package maintenance status. "
