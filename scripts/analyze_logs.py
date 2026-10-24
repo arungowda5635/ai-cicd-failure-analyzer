@@ -1,142 +1,132 @@
 
 def analyze(log):
-    lines = log.splitlines()
-    lower = log.lower()
+    import re
 
-    # Detect missing or unknown package/module errors first.
-    package_patterns = [
-        (
-            r"cannot find module\s+['\"]([^'\"]+)['\"]",
-            "Missing Node.js Module",
-        ),
-        (
-            r"cannot find package\s+['\"]([^'\"]+)['\"]",
-            "Missing Node.js Package",
-        ),
-        (
-            r"module_not_found.*?['\"]([^'\"]+)['\"]",
-            "Missing Node.js Module",
-        ),
-        (
-            r"npm error 404.*?['\"]([^'\"]+)['\"]",
-            "Unknown or Unavailable npm Package",
-        ),
-        (
-            r"npm err! 404.*?['\"]([^'\"]+)['\"]",
-            "Unknown or Unavailable npm Package",
-        ),
-        (
-            r"npm error 404.*?package ['\"]?(@?[\w./-]+)",
-            "Unknown or Unavailable npm Package",
-        ),
-        (
-            r"npm err! 404.*?package ['\"]?(@?[\w./-]+)",
-            "Unknown or Unavailable npm Package",
-        ),
+    lines = log.splitlines()
+    findings = []
+    seen_findings = set()
+
+    # Collect every matching rule, rather than returning after the first match.
+    for category, patterns, cause, fix in RULES:
+        matching_lines = []
+
+        for line in lines:
+            if any(pattern.lower() in line.lower() for pattern in patterns):
+                clean_line = line.strip()
+
+                if clean_line and clean_line not in matching_lines:
+                    matching_lines.append(clean_line)
+
+        if matching_lines and category not in seen_findings:
+            seen_findings.add(category)
+            findings.append({
+                "category": category,
+                "cause": cause,
+                "fix": fix,
+                "evidence": matching_lines[-10:],
+            })
+
+    # Also capture common errors that may not match any existing rule.
+    generic_error_patterns = [
+        r"\bSyntaxError\b",
+        r"\bTypeError\b",
+        r"\bReferenceError\b",
+        r"\bRangeError\b",
+        r"\bModuleNotFoundError\b",
+        r"\bImportError\b",
+        r"\bError:\b",
+        r"\bERR_[A-Z0-9_]+\b",
+        r"\bE[A-Z0-9]{3,}\b",
+        r"\bFATAL\b",
+        r"\bFAILED\b",
+        r"\bFAILURE\b",
+        r"\bException\b",
+        r"\bTraceback \(most recent call last\)",
     ]
 
-    for pattern, category in package_patterns:
-        match = re.search(pattern, log, re.IGNORECASE)
+    unclassified = []
+    seen_lines = set()
 
-        if match:
-            package_name = match.group(1).strip()
-            evidence_lines = [
-                line.strip()
-                for line in lines
-                if any(
-                    word in line.lower()
-                    for word in [
-                        "cannot find module",
-                        "cannot find package",
-                        "module_not_found",
-                        "npm error 404",
-                        "npm err! 404",
-                    ]
-                )
-            ]
+    for line in lines:
+        clean_line = line.strip()
 
-            evidence = "\n".join(
-                f"- `{line[:400]}`"
-                for line in evidence_lines[-5:]
+        if not clean_line or clean_line in seen_lines:
+            continue
+
+        seen_lines.add(clean_line)
+
+        if any(
+            re.search(pattern, clean_line, re.IGNORECASE)
+            for pattern in generic_error_patterns
+        ):
+            # Avoid repeating evidence already reported under a known category.
+            already_reported = any(
+                clean_line in finding["evidence"]
+                for finding in findings
             )
 
-            return (
-                "## Failure Analysis\n\n"
-                f"**Category:** {category}\n\n"
-                f"**Package or module:** `{package_name}`\n\n"
-                "**Likely cause:** The requested package or module "
-                "could not be resolved. It may be missing, misspelled, "
-                "unavailable in the configured registry, or imported "
-                "using an incorrect path.\n\n"
-                f"**Evidence:**\n{evidence}\n\n"
-                "**Recommended fix:**\n"
-                "- Verify the package name and version.\n"
-                "- Check package.json and package-lock.json.\n"
-                "- Confirm the package is available in the configured npm registry.\n"
-                "- Check whether the import path and module type are correct.\n"
-                "- Reinstall dependencies in a trusted environment and rerun tests.\n\n"
-                "**Verification:** Run `npm ls <package-name>` and "
-                "`npm test` after correcting the issue.\n"
+            if not already_reported:
+                unclassified.append(clean_line)
+
+    report = [
+        "# CI/CD Failure Analysis",
+        "",
+        "**Analysis mode:** Rule-based (no API required)",
+        "",
+        f"**Detected error categories:** {len(findings)}",
+        "",
+    ]
+
+    if findings:
+        for index, finding in enumerate(findings, start=1):
+            report.extend([
+                f"## {index}. {finding['category']}",
+                "",
+                f"**Likely cause:** {finding['cause']}",
+                "",
+                "**Evidence from the log:**",
+                "",
+            ])
+
+            for evidence in finding["evidence"]:
+                report.append(f"- `{evidence[:500]}`")
+
+            report.extend([
+                "",
+                f"**Recommended fix:** {finding['fix']}",
+                "",
+            ])
+    else:
+        report.extend([
+            "No known error categories matched the downloaded log.",
+            "",
+        ])
+
+    report.extend([
+        "## Other / Unclassified Errors",
+        "",
+    ])
+
+    if unclassified:
+        for line in unclassified[:50]:
+            report.append(f"- `{line[:500]}`")
+
+        if len(unclassified) > 50:
+            report.append(
+                f"- Plus {len(unclassified) - 50} additional error-like lines."
             )
-
-    # Handle dependency resolution errors separately.
-    if (
-        "eresolve" in lower
-        or "unable to resolve dependency tree" in lower
-    ):
-        evidence_lines = [
-            line.strip()
-            for line in lines
-            if "eresolve" in line.lower()
-            or "peer dep" in line.lower()
-            or "dependency tree" in line.lower()
-        ]
-
-        evidence = "\n".join(
-            f"- `{line[:400]}`"
-            for line in evidence_lines[-5:]
+    else:
+        report.append(
+            "No additional unclassified error patterns were detected."
         )
 
-        return (
-            "## Failure Analysis\n\n"
-            "**Category:** Dependency Version Conflict\n\n"
-            "**Likely cause:** npm could not resolve a compatible "
-            "combination of package versions.\n\n"
-            f"**Evidence:**\n{evidence}\n\n"
-            "**Recommended fix:** Review the conflicting packages and "
-            "their peer dependency requirements. Select compatible "
-            "versions and rerun the tests.\n"
-        )
+    report.extend([
+        "",
+        "## Verification",
+        "",
+        "Review each finding against the original failed step. "
+        "Some messages may be secondary errors caused by an earlier failure. "
+        "Fix the underlying cause and rerun the failed workflow.",
+    ])
 
-    # Fall back to the existing general rules.
-    for category, patterns, cause, fix in RULES:
-        matches = [
-            line.strip()
-            for line in lines
-            if any(pattern in line.lower() for pattern in patterns)
-        ]
-
-        if matches:
-            evidence = "\n".join(
-                f"- `{line[:400]}`" for line in matches[-5:]
-            )
-
-            return (
-                f"## Failure Analysis\n\n"
-                f"**Category:** {category}\n\n"
-                f"**Likely cause:** {cause}\n\n"
-                f"**Evidence:**\n{evidence}\n\n"
-                f"**Recommended fix:** {fix}\n\n"
-                "**Note:** This is a pattern-based diagnosis. "
-                "Verify it against the full failed step log.\n"
-            )
-
-    tail = "\n".join(lines[-12:])[-3000:]
-
-    return (
-        "## Failure Analysis\n\n"
-        "**Category:** Unknown Failure\n\n"
-        "**Likely cause:** No known error pattern was detected.\n\n"
-        f"**Recent log lines:**\n```\n{tail}\n```\n\n"
-        "Review the first meaningful error in the failed workflow step.\n"
-    )
+    return "\n".join(report) + "\n"
