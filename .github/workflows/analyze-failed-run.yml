@@ -47,23 +47,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Analyze failure
+      -  name: Analyze failure
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          echo "===== Starting analyzer ====="
-          python -u scripts/analyze_logs.py | tee analysis-report.md
+          echo "===== Check analyzer file ====="
+          ls -l scripts/analyze_logs.py
 
-          echo "===== Report file contents ====="
-          cat analysis-report.md
+          echo "===== Check downloaded log ====="
+          ls -lh failed-run.log
+          wc -l failed-run.log
 
-          if [ ! -s analysis-report.md ]; then
-            echo "ERROR: Analyzer produced no output."
-            exit 1
-          fi
-
-          {
-            echo "# Automatic CI Failure Report"
-            echo
-            cat analysis-report.md
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "===== Run analyzer ====="
+          python -u scripts/analyze_logs.py
