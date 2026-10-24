@@ -5,6 +5,7 @@ on:
   workflow_run:
     workflows:
       - Node.js CI
+      - DevOps CI/CD Failure Analyzer
     types:
       - completed
 
@@ -49,7 +50,7 @@ jobs:
       - name: Analyze failure
         env:
           PYTHONUNBUFFERED: "1"
-         run: |
+        run: |
           echo "===== Starting analyzer ====="
           python -u scripts/analyze_logs.py | tee analysis-report.md
 
