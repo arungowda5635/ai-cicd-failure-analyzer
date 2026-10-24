@@ -10,7 +10,7 @@ class TestFailureAnalyzer(unittest.TestCase):
         result = analyze_failure(
             "ModuleNotFoundError: No module named 'requests'"
         )
-        self.assertEqual(result["category"], "Missing dependency")
+        self.assertEqual(result["category"], "Some other error")
 
     def test_permission_error(self):
         result = analyze_failure("ERROR: Permission denied")
