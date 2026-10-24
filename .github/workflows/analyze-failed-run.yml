@@ -49,12 +49,18 @@ jobs:
       - name: Analyze failure
         env:
           PYTHONUNBUFFERED: "1"
-        run: |
-          echo "===== Starting CI Failure Analysis ====="
+         run: |
+          echo "===== Starting analyzer ====="
           python -u scripts/analyze_logs.py | tee analysis-report.md
-          echo "===== Generated Analysis Report ====="
+
+          echo "===== Report file contents ====="
           cat analysis-report.md
-          echo "===== Publishing Report to GitHub Summary ====="
+
+          if [ ! -s analysis-report.md ]; then
+            echo "ERROR: Analyzer produced no output."
+            exit 1
+          fi
+
           {
             echo "# Automatic CI Failure Report"
             echo
