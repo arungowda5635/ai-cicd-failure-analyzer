@@ -5,14 +5,17 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  analyze-failure:
-    name: Analyze Sample Build Failure
+  test-and-analyze:
+    name: Test and Analyze Failures
     runs-on: ubuntu-latest
 
     steps:
@@ -24,5 +27,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run failure analysis
+      - name: Run automated tests
+        run: python -m unittest -v test_analyzer
+
+      - name: Analyze sample CI/CD failure
         run: python analyze_failure.py
